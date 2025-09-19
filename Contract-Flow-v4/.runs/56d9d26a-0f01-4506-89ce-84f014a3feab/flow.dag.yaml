@@ -1,0 +1,47 @@
+id: template_standard_flow
+name: Template Standard Flow
+inputs:
+  pdf_filename:
+    type: string
+    is_chat_input: false
+  question:
+    type: string
+    default: ""
+    is_chat_input: false
+  k:
+    type: int
+    is_chat_input: false
+  index:
+    type: string
+    default: ""
+    is_chat_input: false
+outputs:
+  answer:
+    type: string
+    reference: ${augmentation.output}
+  context:
+    type: string
+    reference: ${retriever.output}
+nodes:
+- name: retriever
+  type: python
+  source:
+    type: code
+    path: retriever.py
+  inputs:
+    index: ${inputs.index}
+    k: ${inputs.k}
+    pdf_filename: ${inputs.pdf_filename}
+    question: ${inputs.question}
+  use_variants: false
+- name: augmentation
+  type: prompt
+  source:
+    type: code
+    path: augmentation.jinja2
+  inputs:
+    context: ${retriever.output}
+  use_variants: false
+node_variants: {}
+environment:
+  python_requirements_txt: requirements.txt
