@@ -52,6 +52,72 @@ def ExtractTextFromPDF(myblob: func.InputStream):
     finally:
         os.remove(path)
 
+@app.function_name(name="ListContracts")
+@app.route(route="ListContracts", methods=["GET"], auth_level=func.AuthLevel.FUNCTION)
+def ListContractsHttp(req: func.HttpRequest) -> func.HttpResponse:
+    page_size = int(req.params.get("pageSize", 10))
+
+    # Support both GET (query params) and POST (request body) for continuation tokens
+    if req.method == "POST":
+        try:
+            req_body = req.get_json()
+            continuation_token = req_body.get("continuationToken") if req_body else None
+        except:
+            continuation_token = None
+    else:
+        continuation_token = req.params.get("continuationToken", None)
+
+    cosmos_url = os.getenv("ACCOUNT_URI_COSMOS")
+    cosmos_key = os.getenv("ACCOUNT_KEY_COSMOS")
+    db_name = os.getenv("COSMOS_DB_NAME")
+    container_name = os.getenv("COSMOS_CONTAINER_NAME")
+    
+    client = CosmosClient(cosmos_url, credential=cosmos_key)
+    database = client.get_database_client(db_name)
+    container = database.get_container_client(container_name)
+
+    query = "SELECT * FROM c ORDER BY c._ts DESC"
+    options = {
+        "enable_cross_partition_query": True,
+        "max_item_count": page_size,
+    }
+
+    try:
+        iterator = container.query_items(
+            query=query, 
+            parameters=None, 
+            **options
+        ).by_page(continuation_token)
+        page = next(iterator)
+        items = list(page)
+        token = page.continuation_token
+
+        return func.HttpResponse(
+            status_code=200,
+            body=json.dumps({
+                "items": items,
+                "continuationToken": token
+            }),
+            mimetype="application/json"
+        )
+    except Exception as e:
+        logging.exception("Error listing contracts")
+        return func.HttpResponse(f"Error: {str(e)}", status_code=500)
+
+@app.function_name(name="ContractById")
+@app.route(route="contractid/{contract_id}", methods=["GET"], auth_level=func.AuthLevel.FUNCTION)
+def ContractByIdHttp(req: func.HttpRequest) -> func.HttpResponse:
+    # Delegate to existing v1-style implementation
+    from ContractById import __init__ as contract_by_id
+    return contract_by_id.main(req)
+
+@app.function_name(name="SwapApiFunction")
+@app.route(route="contracts", methods=["GET"], auth_level=func.AuthLevel.FUNCTION)
+def SwapApiFunctionHttp(req: func.HttpRequest) -> func.HttpResponse:
+    # Delegate to existing v1-style implementation
+    from SwapApiFunction import __init__ as swap_api
+    return swap_api.main(req)
+
 @app.blob_trigger(arg_name="myblob", path="contratos/{name}.txt",
                                connection="AzureBlobStorageLab") 
 def ProcessText(myblob: func.InputStream):
