@@ -7,7 +7,16 @@ from azure.cosmos import CosmosClient
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
     page_size = int(req.params.get("pageSize", 10))
-    continuation_token = req.params.get("continuationToken", None)
+
+    # Support both GET (query params) and POST (request body) for continuation tokens
+    if req.method == "POST":
+        try:
+            req_body = req.get_json()
+            continuation_token = req_body.get("continuationToken") if req_body else None
+        except:
+            continuation_token = None
+    else:
+        continuation_token = req.params.get("continuationToken", None)
 
     cosmos_url = os.getenv("ACCOUNT_URI_COSMOS")
     cosmos_key = os.getenv("ACCOUNT_KEY_COSMOS")
